@@ -2,8 +2,10 @@
 #include <base/math.h>
 #include <base/vmath.h>
 #include <engine/shared/config.h>
+#include <engine/system.h>
 #include <game/client/gameclient.h>
 #include <game/collision.h>
+#include <game/mapitems.h>
 
 #define MAX_BOUNCES 5
 #define LASER_LEN 800.0f
@@ -17,26 +19,18 @@ void CAutoUnfreeze::OnReset()
 
 bool CAutoUnfreeze::IsFrozen(vec2 Pos)
 {
-	int Tiles[] = {
-		GameClient()->Collision()->GetCollisionAt(Pos.x, Pos.y),
-		GameClient()->Collision()->GetCollisionAt(Pos.x - 14, Pos.y - 14),
-		GameClient()->Collision()->GetCollisionAt(Pos.x + 14, Pos.y + 14)};
-	for(int t : Tiles)
-	{
-		if(t & CCollision::COLFLAG_FREEZE)
-		{
-			return true;
-		}
-	}
-	return false;
+	// В твоем коде проверка идет через GetTile и сравнение с TILE_FREEZE
+	int Tile = GameClient()->Collision()->GetTile(round_to_int(Pos.x), round_to_int(Pos.y));
+	return (Tile == TILE_FREEZE);
 }
 
 vec2 CAutoUnfreeze::GetNormal(vec2 HitPos)
 {
+	// Используем IsSolid из твоего collision.h
 	vec2 Directions[4] = {vec2(-1, 0), vec2(1, 0), vec2(0, -1), vec2(0, 1)};
 	for(auto &Dir : Directions)
 	{
-		if(GameClient()->Collision()->GetCollisionAt(HitPos.x + Dir.x * 2, HitPos.y + Dir.y * 2) & CCollision::COLFLAG_SOLID)
+		if(GameClient()->Collision()->IsSolid(round_to_int(HitPos.x + Dir.x * 2), round_to_int(HitPos.y + Dir.y * 2)))
 		{
 			return -Dir;
 		}
@@ -50,10 +44,15 @@ float CAutoUnfreeze::ClosestDistPointLine(vec2 Pos, vec2 LineStart, vec2 LineEnd
 	float l2 = length_squared(LineDir);
 	if(l2 == 0.0f)
 	{
-		return distance(Pos, LineStart);
+		return length(Pos - LineStart);
 	}
-	float t = clamp(dot(Pos - LineStart, LineDir) / l2, 0.0f, 1.0f);
-	return distance(Pos, LineStart + t * LineDir);
+	float t = dot(Pos - LineStart, LineDir) / l2;
+	if(t < 0.0f)
+		t = 0.0f;
+	if(t > 1.0f)
+		t = 1.0f;
+	vec2 Projection = LineStart + LineDir * t;
+	return length(Pos - Projection);
 }
 
 void CAutoUnfreeze::OnRender()
@@ -103,7 +102,7 @@ void CAutoUnfreeze::OnRender()
 					}
 				}
 				vec2 Normal = GetNormal(Hit);
-				CurrentDir = CurrentDir - 2.0f * dot(CurrentDir, Normal) * Normal;
+				CurrentDir = CurrentDir - Normal * 2.0f * dot(CurrentDir, Normal);
 				CurrentPos = Hit + CurrentDir * 0.5f;
 			}
 			else
