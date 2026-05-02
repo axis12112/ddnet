@@ -227,3 +227,5 @@ cp -R other/vim/* ~/.vim/
 # neovim
 cp -R other/vim/* ~/.config/nvim/
 ```
+ git add .
+ build check
