@@ -1,8 +1,8 @@
 #include "auto_unfreeze.h"
 #include <base/math.h>
+#include <base/system.h>
 #include <base/vmath.h>
 #include <engine/shared/config.h>
-#include <engine/system.h>
 #include <game/client/gameclient.h>
 #include <game/collision.h>
 #include <game/mapitems.h>
@@ -19,17 +19,16 @@ void CAutoUnfreeze::OnReset()
 
 bool CAutoUnfreeze::IsFrozen(vec2 Pos)
 {
-	// В твоем коде проверка идет через GetTile и сравнение с TILE_FREEZE
 	int Tile = GameClient()->Collision()->GetTile(round_to_int(Pos.x), round_to_int(Pos.y));
 	return (Tile == TILE_FREEZE);
 }
 
 vec2 CAutoUnfreeze::GetNormal(vec2 HitPos)
 {
-	// Используем IsSolid из твоего collision.h
 	vec2 Directions[4] = {vec2(-1, 0), vec2(1, 0), vec2(0, -1), vec2(0, 1)};
 	for(auto &Dir : Directions)
 	{
+		// ИСПРАВЛЕНО: используем IsSolid, который точно есть в твоем collision.h
 		if(GameClient()->Collision()->IsSolid(round_to_int(HitPos.x + Dir.x * 2), round_to_int(HitPos.y + Dir.y * 2)))
 		{
 			return -Dir;
@@ -42,34 +41,28 @@ float CAutoUnfreeze::ClosestDistPointLine(vec2 Pos, vec2 LineStart, vec2 LineEnd
 {
 	vec2 LineDir = LineEnd - LineStart;
 	float l2 = length_squared(LineDir);
-	if(l2 == 0.0f)
-	{
-		return length(Pos - LineStart);
-	}
+	if(l2 == 0.0f) return length(Pos - LineStart);
+	
 	float t = dot(Pos - LineStart, LineDir) / l2;
-	if(t < 0.0f)
-		t = 0.0f;
-	if(t > 1.0f)
-		t = 1.0f;
+	if(t < 0.0f) t = 0.0f;
+	if(t > 1.0f) t = 1.0f;
+	
 	vec2 Projection = LineStart + LineDir * t;
 	return length(Pos - Projection);
 }
 
 void CAutoUnfreeze::OnRender()
 {
-	if(!GameClient()->m_Snap.m_pLocalCharacter)
-	{
-		return;
-	}
+	if(!GameClient()->m_Snap.m_pLocalCharacter) return;
 
 	vec2 Pos = GameClient()->m_LocalCharacterPos;
 	vec2 Vel = Pos - m_LastPos;
 	m_LastPos = Pos;
 
-	if(!IsFrozen(Pos) || length(Vel) > 0.5f)
-	{
+	vec2 PredictedPos = Pos + Vel * 1.5f;
+
+	if(!IsFrozen(PredictedPos) && !IsFrozen(Pos)) 
 		return;
-	}
 
 	int Dummy = g_Config.m_ClDummy;
 	vec2 BestDir = vec2(0, 0);
@@ -89,31 +82,22 @@ void CAutoUnfreeze::OnRender()
 			{
 				if(b > 0)
 				{
-					float d = ClosestDistPointLine(Pos, CurrentPos, Hit);
+					float d = ClosestDistPointLine(PredictedPos, CurrentPos, Hit);
 					if(d < PLAYER_RADIUS && d < BestDist)
 					{
 						BestDist = d;
 						BestDir = vec2(cosf(a), sinf(a));
 						Found = true;
-						if(d < 2.0f)
-						{
-							break;
-						}
+						if(d < 2.0f) break;
 					}
 				}
 				vec2 Normal = GetNormal(Hit);
 				CurrentDir = CurrentDir - Normal * 2.0f * dot(CurrentDir, Normal);
 				CurrentPos = Hit + CurrentDir * 0.5f;
 			}
-			else
-			{
-				break;
-			}
+			else break;
 		}
-		if(Found && BestDist < 5.0f)
-		{
-			break;
-		}
+		if(Found && BestDist < 5.0f) break;
 	}
 
 	if(Found)
@@ -123,7 +107,7 @@ void CAutoUnfreeze::OnRender()
 		GameClient()->m_Controls.m_aInputData[Dummy].m_WantedWeapon = 5 + 1;
 
 		int64_t Now = time_get();
-		if(GameClient()->m_Snap.m_pLocalCharacter->m_Weapon == 5 && Now > m_LastFireTime + time_freq() / 10)
+		if(GameClient()->m_Snap.m_pLocalCharacter->m_Weapon == 5 && Now > m_LastFireTime + time_freq() / 15)
 		{
 			GameClient()->m_Controls.m_aInputData[Dummy].m_Fire++;
 			m_LastFireTime = Now;
