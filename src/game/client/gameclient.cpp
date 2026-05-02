@@ -3,6 +3,7 @@
 
 #include "gameclient.h"
 
+#include "components/auto_unfreeze.h"
 #include "components/background.h"
 #include "components/binds.h"
 #include "components/broadcast.h"
@@ -122,6 +123,7 @@ void CGameClient::OnConsoleInit()
 	// make a list of all the systems, make sure to add them in the correct render order
 	m_vpAll.insert(m_vpAll.end(), {&m_Skins,
 					      &m_Skins7,
+						  m_AutoUnfreeze
 					      &m_CountryFlags,
 					      &m_MapImages,
 					      &m_Effects, // doesn't render anything, just updates effects

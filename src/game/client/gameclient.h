@@ -8,6 +8,7 @@
 #include <base/color.h>
 #include <base/vmath.h>
 
+#include "components/auto_unfreeze.h"
 #include <engine/client.h>
 #include <engine/client/enums.h>
 #include <engine/console.h>
@@ -145,6 +146,7 @@ public:
 	CInfoMessages m_InfoMessages;
 	CCamera m_Camera;
 	CChat m_Chat;
+	CAutoUnfreeze m_AutoUnfreeze;
 	CCensor m_Censor;
 	CMotd m_Motd;
 	CBroadcast m_Broadcast;

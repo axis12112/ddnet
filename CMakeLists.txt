@@ -2419,6 +2419,8 @@ if(CLIENT)
     animstate.h
     component.cpp
     component.h
+    components/auto_unfreeze.cpp
+    components/auto_unfreeze.h
     components/background.cpp
     components/background.h
     components/binds.cpp
