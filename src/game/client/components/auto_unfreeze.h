@@ -5,18 +5,18 @@
 
 class CAutoUnfreeze : public CComponent
 {
-    vec2 m_LastPos;
-    int64_t m_LastFireTime; // Чтобы не спамить выстрелами слишком часто
+	vec2 m_LastPos;
+	int64_t m_LastFireTime;
 
 public:
-    virtual int Sizeof() const override { return sizeof(*this); }
-    virtual void OnReset() override;
-    virtual void OnRender() override;
+	virtual int Sizeof() const override { return sizeof(*this); }
+	virtual void OnReset() override;
+	virtual void OnRender() override;
 
 private:
-    bool IsFrozen(vec2 Pos);
-    vec2 GetNormal(vec2 HitPos);
-    float ClosestDistPointLine(vec2 Pos, vec2 LineStart, vec2 LineEnd);
+	bool IsFrozen(vec2 Pos);
+	vec2 GetNormal(vec2 HitPos);
+	float ClosestDistPointLine(vec2 Pos, vec2 LineStart, vec2 LineEnd);
 };
 
 #endif
