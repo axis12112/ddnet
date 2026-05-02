@@ -5,111 +5,113 @@
 #include <base/math.h>
 #include <base/vmath.h>
 
-#define MAX_BOUNCES 4
+#define MAX_BOUNCES 5
 #define LASER_LEN 800.0f
-
-// Исправляем ошибку компиляции (обязательная функция)
-int CAutoUnfreeze::Sizeof() const 
-{ 
-    return sizeof(*this); 
-}
+#define PLAYER_RADIUS 14.0f // Половина хитбокса тиворлда
 
 void CAutoUnfreeze::OnReset()
 {
     m_LastPos = vec2(0, 0);
+    m_LastFireTime = 0;
 }
 
-bool CAutoUnfreeze::IsNearFreeze(vec2 Pos)
+// Проверка: мы действительно застряли на фризе?
+bool CAutoUnfreeze::IsFrozen(vec2 Pos)
 {
-    // Проверка на заморозку в радиусе игрока
-    for(int x = -1; x <= 1; x++)
-    {
-        for(int y = -1; y <= 1; y++)
-        {
-            if(m_pClient->Collision()->GetCollisionAt(Pos.x + x * 32, Pos.y + y * 32) & CCollision::COLFLAG_FREEZE)
-                return true;
-        }
-    }
+    // Проверяем 5 точек (центр и края), чтобы точно знать, что мы во фризе
+    int Tiles[] = {
+        m_pClient->Collision()->GetCollisionAt(Pos.x, Pos.y),
+        m_pClient->Collision()->GetCollisionAt(Pos.x-14, Pos.y-14),
+        m_pClient->Collision()->GetCollisionAt(Pos.x+14, Pos.y+14)
+    };
+    for(int t : Tiles)
+        if(t & CCollision::COLFLAG_FREEZE) return true;
     return false;
 }
 
-vec2 CAutoUnfreeze::GetNormal(vec2 From, vec2 To)
+// Точный расчет нормали поверхности
+vec2 CAutoUnfreeze::GetNormal(vec2 HitPos)
 {
-    vec2 Dir = normalize(To - From);
-    vec2 TestX = vec2(Dir.y, -Dir.x);
-    vec2 TestY = vec2(-Dir.y, Dir.x);
-
-    if(m_pClient->Collision()->GetCollisionAt(To.x + TestX.x * 4, To.y + TestX.y * 4) & CCollision::COLFLAG_SOLID)
-        return TestX;
-    if(m_pClient->Collision()->GetCollisionAt(To.x + TestY.x * 4, To.y + TestY.y * 4) & CCollision::COLFLAG_SOLID)
-        return TestY;
-
+    vec2 Directions[4] = { vec2(-1, 0), vec2(1, 0), vec2(0, -1), vec2(0, 1) };
+    for(auto &Dir : Directions)
+    {
+        if(m_pClient->Collision()->GetCollisionAt(HitPos.x + Dir.x * 2, HitPos.y + Dir.y * 2) & CCollision::COLFLAG_SOLID)
+            return -Dir;
+    }
     return vec2(0, -1);
 }
 
-bool CAutoUnfreeze::SimulateLaser(vec2 Pos, vec2 Dir, vec2 &OutHitPos, vec2 &OutDir)
+float CAutoUnfreeze::ClosestDistPointLine(vec2 Pos, vec2 LineStart, vec2 LineEnd)
 {
-    vec2 CurrentPos = Pos;
-    vec2 CurrentDir = normalize(Dir);
-
-    for(int i = 0; i < MAX_BOUNCES; i++)
-    {
-        vec2 To = CurrentPos + CurrentDir * LASER_LEN;
-        vec2 Hit;
-        if(m_pClient->Collision()->IntersectLine(CurrentPos, To, &Hit, nullptr))
-        {
-            vec2 Normal = GetNormal(CurrentPos, Hit);
-            CurrentDir = CurrentDir - 2.0f * dot(CurrentDir, Normal) * Normal;
-            CurrentPos = Hit;
-        }
-        else 
-        { 
-            break; 
-        }
-    }
-    OutHitPos = CurrentPos;
-    OutDir = CurrentDir;
-    return true;
+    vec2 LineDir = LineEnd - LineStart;
+    float l2 = length_squared(LineDir);
+    if(l2 == 0.0f) return distance(Pos, LineStart);
+    float t = clamp(dot(Pos - LineStart, LineDir) / l2, 0.0f, 1.0f);
+    return distance(Pos, LineStart + t * LineDir);
 }
 
 void CAutoUnfreeze::OnRender()
 {
-    if(!m_pClient->m_Snap.m_pLocalCharacter) 
-        return;
+    // Работаем только если мы в игре и за правильного персонажа
+    if(!m_pClient->m_Snap.m_pLocalCharacter) return;
 
     vec2 Pos = m_pClient->m_LocalCharacterPos;
     vec2 Vel = Pos - m_LastPos;
     m_LastPos = Pos;
 
-    if(!IsNearFreeze(Pos)) 
-        return;
+    // Активация: если мы на фризе и скорость упала (значит застряли)
+    if(!IsFrozen(Pos) || length(Vel) > 0.5f) return;
 
-    // Предсказываем, где мы будем через 4 тика
-    vec2 Predicted = Pos + Vel * 4.0f;
-    float BestScore = 1000.0f;
+    int Dummy = g_Config.m_ClDummy;
     vec2 BestDir = vec2(0, 0);
+    float BestDist = 100.0f;
+    bool Found = false;
 
-    for(float a = 0; a < pi * 2; a += 0.15f)
+    // Сканируем углы. Шаг 0.05f (~3 градуса) для высокой точности
+    for(float a = 0; a < pi * 2; a += 0.05f)
     {
-        vec2 Dir = vec2(cosf(a), sinf(a));
-        vec2 HitPos, OutDir;
-        SimulateLaser(Pos, Dir, HitPos, OutDir);
-
-        vec2 EndPos = HitPos + OutDir * 150.0f; 
-        float Dist = distance(EndPos, Predicted);
-
-        if(Dist < BestScore)
+        vec2 CurrentPos = Pos;
+        vec2 CurrentDir = vec2(cosf(a), sinf(a));
+        
+        for(int b = 0; b < MAX_BOUNCES; b++)
         {
-            BestScore = Dist;
-            BestDir = Dir;
+            vec2 To = CurrentPos + CurrentDir * LASER_LEN;
+            vec2 Hit;
+            if(m_pClient->Collision()->IntersectLine(CurrentPos, To, &Hit, nullptr))
+            {
+                if(b > 0) // Начиная со второго сегмента (рикошета)
+                {
+                    float d = ClosestDistPointLine(Pos, CurrentPos, Hit);
+                    if(d < PLAYER_RADIUS && d < BestDist)
+                    {
+                        BestDist = d;
+                        BestDir = vec2(cosf(a), sinf(a));
+                        Found = true;
+                        if(d < 2.0f) break; // Почти идеальное попадание
+                    }
+                }
+                vec2 Normal = GetNormal(Hit);
+                CurrentDir = CurrentDir - 2.0f * dot(CurrentDir, Normal) * Normal;
+                CurrentPos = Hit + CurrentDir * 0.5f;
+            }
+            else break;
         }
+        if(Found && BestDist < 5.0f) break; 
     }
 
-    if(BestScore < 80.0f)
+    if(Found)
     {
-        int Dummy = g_Config.m_ClDummy;
-        m_pClient->m_Controls.m_aInputData[Dummy].m_TargetX = (int)(BestDir.x * 500.0f);
-        m_pClient->m_Controls.m_aInputData[Dummy].m_TargetY = (int)(BestDir.y * 500.0f);
-        m_pClient->m_Controls.m_aInputData[Dummy].m_WantedWeapon = 5 + 1; // Лазер
+        // Наводимся
+        m_pClient->m_Controls.m_aInputData[Dummy].m_TargetX = (int)(BestDir.x * 512.0f);
+        m_pClient->m_Controls.m_aInputData[Dummy].m_TargetY = (int)(BestDir.y * 512.0f);
+        m_pClient->m_Controls.m_aInputData[Dummy].m_WantedWeapon = 5 + 1; // Laser
+
+        // Стреляем с задержкой, чтобы сервер успел принять поворот прицела
+        int64_t Now = time_get();
+        if(m_pClient->m_Snap.m_pLocalCharacter->m_Weapon == 5 && Now > m_LastFireTime + time_freq() / 10)
+        {
+            m_pClient->m_Controls.m_aInputData[Dummy].m_Fire++;
+            m_LastFireTime = Now;
+        }
     }
 }
