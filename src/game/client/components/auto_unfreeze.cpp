@@ -1,12 +1,18 @@
 #include "auto_unfreeze.h"
+#include <engine/shared/config.h>
 #include <game/client/gameclient.h>
 #include <game/collision.h>
-#include <engine/shared/config.h>
-#include <base/vmath.h>
 #include <base/math.h>
+#include <base/vmath.h>
 
 #define MAX_BOUNCES 4
 #define LASER_LEN 800.0f
+
+// Исправляем ошибку компиляции (обязательная функция)
+int CAutoUnfreeze::Sizeof() const 
+{ 
+    return sizeof(*this); 
+}
 
 void CAutoUnfreeze::OnReset()
 {
@@ -17,9 +23,13 @@ bool CAutoUnfreeze::IsNearFreeze(vec2 Pos)
 {
     // Проверка на заморозку в радиусе игрока
     for(int x = -1; x <= 1; x++)
+    {
         for(int y = -1; y <= 1; y++)
+        {
             if(m_pClient->Collision()->GetCollisionAt(Pos.x + x * 32, Pos.y + y * 32) & CCollision::COLFLAG_FREEZE)
                 return true;
+        }
+    }
     return false;
 }
 
@@ -52,27 +62,32 @@ bool CAutoUnfreeze::SimulateLaser(vec2 Pos, vec2 Dir, vec2 &OutHitPos, vec2 &Out
             CurrentDir = CurrentDir - 2.0f * dot(CurrentDir, Normal) * Normal;
             CurrentPos = Hit;
         }
-        else { break; }
+        else 
+        { 
+            break; 
+        }
     }
     OutHitPos = CurrentPos;
     OutDir = CurrentDir;
     return true;
 }
 
-void CAutoUnfreeze::OnUpdate()
+void CAutoUnfreeze::OnRender()
 {
-    if(!m_pClient->m_Snap.m_pLocalCharacter) return;
+    if(!m_pClient->m_Snap.m_pLocalCharacter) 
+        return;
 
     vec2 Pos = m_pClient->m_LocalCharacterPos;
     vec2 Vel = Pos - m_LastPos;
     m_LastPos = Pos;
 
-    if(!IsNearFreeze(Pos)) return;
+    if(!IsNearFreeze(Pos)) 
+        return;
 
     // Предсказываем, где мы будем через 4 тика
     vec2 Predicted = Pos + Vel * 4.0f;
     float BestScore = 1000.0f;
-    vec2 BestDir = vec2(0,0);
+    vec2 BestDir = vec2(0, 0);
 
     for(float a = 0; a < pi * 2; a += 0.15f)
     {
@@ -80,7 +95,7 @@ void CAutoUnfreeze::OnUpdate()
         vec2 HitPos, OutDir;
         SimulateLaser(Pos, Dir, HitPos, OutDir);
 
-        vec2 EndPos = HitPos + OutDir * 150.0f; // Точка после последнего рикошета
+        vec2 EndPos = HitPos + OutDir * 150.0f; 
         float Dist = distance(EndPos, Predicted);
 
         if(Dist < BestScore)
@@ -96,6 +111,5 @@ void CAutoUnfreeze::OnUpdate()
         m_pClient->m_Controls.m_aInputData[Dummy].m_TargetX = (int)(BestDir.x * 500.0f);
         m_pClient->m_Controls.m_aInputData[Dummy].m_TargetY = (int)(BestDir.y * 500.0f);
         m_pClient->m_Controls.m_aInputData[Dummy].m_WantedWeapon = 5 + 1; // Лазер
-        // Стрельбу лучше оставить под ручной контроль или добавить проверку m_Fire
     }
 }

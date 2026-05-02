@@ -8,8 +8,11 @@ class CAutoUnfreeze : public CComponent
     vec2 m_LastPos; // Храним прошлую позицию для расчета скорости
 
 public:
-    virtual void OnUpdate() override; // В Teeworlds используется OnUpdate вместо OnTick
+    // Обязательная функция для DDNet (исправляет твою ошибку)
+    virtual int Sizeof() const override { return sizeof(*this); }
+    
     virtual void OnReset() override;
+    virtual void OnRender() override; // В DDNet логика обычно пишется здесь
 
 private:
     bool IsNearFreeze(vec2 Pos);
