@@ -19,7 +19,8 @@ void CAutoUnfreeze::OnReset()
 
 bool CAutoUnfreeze::IsFrozen(vec2 Pos)
 {
-	int Tile = GameClient()->Collision()->GetTile(round_to_int(Pos.x), round_to_int(Pos.y));
+	// Используем GetCollisionAt из твоего файла collision.h
+	int Tile = GameClient()->Collision()->GetCollisionAt(Pos.x, Pos.y);
 	return (Tile == TILE_FREEZE);
 }
 
@@ -28,7 +29,7 @@ vec2 CAutoUnfreeze::GetNormal(vec2 HitPos)
 	vec2 Directions[4] = {vec2(-1, 0), vec2(1, 0), vec2(0, -1), vec2(0, 1)};
 	for(auto &Dir : Directions)
 	{
-		// ИСПРАВЛЕНО: используем IsSolid, который точно есть в твоем collision.h
+		// Используем IsSolid из твоего collision.h
 		if(GameClient()->Collision()->IsSolid(round_to_int(HitPos.x + Dir.x * 2), round_to_int(HitPos.y + Dir.y * 2)))
 		{
 			return -Dir;
@@ -41,35 +42,42 @@ float CAutoUnfreeze::ClosestDistPointLine(vec2 Pos, vec2 LineStart, vec2 LineEnd
 {
 	vec2 LineDir = LineEnd - LineStart;
 	float l2 = length_squared(LineDir);
-	if(l2 == 0.0f) return length(Pos - LineStart);
-	
+	if(l2 == 0.0f)
+		return length(Pos - LineStart);
 	float t = dot(Pos - LineStart, LineDir) / l2;
-	if(t < 0.0f) t = 0.0f;
-	if(t > 1.0f) t = 1.0f;
-	
+	if(t < 0.0f)
+		t = 0.0f;
+	if(t > 1.0f)
+		t = 1.0f;
 	vec2 Projection = LineStart + LineDir * t;
 	return length(Pos - Projection);
 }
 
 void CAutoUnfreeze::OnRender()
 {
-	if(!GameClient()->m_Snap.m_pLocalCharacter) return;
+	if(!GameClient()->m_Snap.m_pLocalCharacter)
+	{
+		return;
+	}
 
 	vec2 Pos = GameClient()->m_LocalCharacterPos;
 	vec2 Vel = Pos - m_LastPos;
 	m_LastPos = Pos;
 
+	// FLY-UNFREEZE: предсказываем позицию, чтобы успеть выстрелить ДО заморозки
 	vec2 PredictedPos = Pos + Vel * 1.5f;
 
-	if(!IsFrozen(PredictedPos) && !IsFrozen(Pos)) 
+	if(!IsFrozen(PredictedPos) && !IsFrozen(Pos))
+	{
 		return;
+	}
 
 	int Dummy = g_Config.m_ClDummy;
 	vec2 BestDir = vec2(0, 0);
 	float BestDist = 100.0f;
 	bool Found = false;
 
-	for(float a = 0; a < pi * 2; a += 0.05f)
+	for(float a = 0; a < 6.2831f; a += 0.05f)
 	{
 		vec2 CurrentPos = Pos;
 		vec2 CurrentDir = vec2(cosf(a), sinf(a));
@@ -88,16 +96,25 @@ void CAutoUnfreeze::OnRender()
 						BestDist = d;
 						BestDir = vec2(cosf(a), sinf(a));
 						Found = true;
-						if(d < 2.0f) break;
+						if(d < 2.0f)
+						{
+							break;
+						}
 					}
 				}
 				vec2 Normal = GetNormal(Hit);
 				CurrentDir = CurrentDir - Normal * 2.0f * dot(CurrentDir, Normal);
 				CurrentPos = Hit + CurrentDir * 0.5f;
 			}
-			else break;
+			else
+			{
+				break;
+			}
 		}
-		if(Found && BestDist < 5.0f) break;
+		if(Found && BestDist < 5.0f)
+		{
+			break;
+		}
 	}
 
 	if(Found)
